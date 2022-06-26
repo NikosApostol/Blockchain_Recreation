@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Text;
 
 namespace MyConsoleApp // Note: actual namespace depends on the project name.
@@ -7,49 +8,74 @@ namespace MyConsoleApp // Note: actual namespace depends on the project name.
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("1. Create a new BlockChain");
-            Console.WriteLine("2. Add to an existing BlockChain");
-            Int32.TryParse(Console.ReadLine(),out int choise);
-
-            switch (choise)
+            string answer;
+            var dataTransaction = CreateDictionary();
+            Console.WriteLine("Hello there! Please choose one option from the following menu.");
+            do
             {
-                case 1:
-                    {
-                        Console.WriteLine("Please specify the name of the folder");
-                        string folderName = Console.ReadLine();
-                        CreateBlockchain(folderName,choise);
+                Console.WriteLine("1. Create a new BlockChain");
+                Console.WriteLine("2. Add to an existing BlockChain");
+                int.TryParse(Console.ReadLine(), out int choise);
+
+                switch (choise)
+                {
+                    case 1:
+                        {
+                            string folderName;
+                            do
+                            {
+                                Console.WriteLine("Please specify the name of the folder you want the blockchain to be placed in.");
+                                folderName = Console.ReadLine().Trim();
+                            } while (folderName == "");
+                            if (CreateBlockchain(folderName, choise, dataTransaction))
+                                Console.WriteLine("New blockchan created successfully!");
+                            break;
+                        }
+                    case 2:
+                        {
+                            string folderName;
+                            do
+                            {
+                                Console.WriteLine("Please specify the name of the folder where the blockchain exists.");
+                                folderName = Console.ReadLine().Trim();
+                            } while (folderName == "");
+                            if (CreateBlockchain(folderName, choise, dataTransaction))
+                                Console.WriteLine("A new block was added successfully.");
+                            break;
+                        }
+                    default:
                         break;
-                    }
-                case 2:
-                    {
-                        Console.WriteLine("Please specify the name of the folder");
-                        string folderName = Console.ReadLine();
-                        CreateBlockchain(folderName, choise);
-                        break;
-                    }
-                default:
-                    break;
-            }
+                }
+
+                do
+                {
+                    Console.WriteLine("Do you want to continue? Press 'Y' if yes or 'N' if no.");
+                    answer = Console.ReadLine().ToUpper().Trim();
+                } while (!(answer == "Y" || answer == "N"));
+
+            } while (answer == "Y");
         }
 
-
-        public static void CreateBlockchain(string blockChainFolder, int choise)
+        public static bool CreateBlockchain(string blockChainFolder, int choise, Dictionary<int, string> transactionData)
         {
+            bool operationCompleted = true;
             var filePaths = new List<string>();
-            (string fileName, string blockName, string blockNumber ) = ("", "", "");
+            (string fullFilePath, string blockName, string blockNumber) = ("", "", "");
+            string direcrory = $@"C:\{blockChainFolder}";
 
-            string direcrory = $@"C:\{blockChainFolder}";      
-            
             if (choise == 1)
             {
                 if (!Directory.Exists(direcrory))
                 {
                     Directory.CreateDirectory(direcrory);
-                    fileName = direcrory + @"\1_Block.txt";
-                    CreateBlockFile(fileName, "", true);
+                    fullFilePath = direcrory + @"\1_Block.txt";
+                    CreateBlockFile(fullFilePath, "", true, transactionData);
                 }
-                else                
-                    Console.WriteLine("This folder already exists");                                    
+                else
+                {
+                    Console.WriteLine("This folder already exists");
+                    operationCompleted = false;
+                }
             }
             else
             {
@@ -57,64 +83,63 @@ namespace MyConsoleApp // Note: actual namespace depends on the project name.
                 {
                     filePaths = Directory.GetFiles(direcrory, "*.txt").ToList();
                     string lastFilePath = filePaths.Last();
-                    String pattern = @"\\";
-                    String[] elements = System.Text.RegularExpressions.Regex.Split(lastFilePath, pattern);
+                    string pattern = @"\\";
+                    string[] elements = System.Text.RegularExpressions.Regex.Split(lastFilePath, pattern);
                     blockName = elements.Last();
-                    if (blockName == "1_Block.txt")
-                    {
-                        fileName = direcrory + @"\2_Block.txt";
-                        CreateBlockFile(fileName, lastFilePath, false);
-                    }
-                    else
-                    {
-                        String pattern2 = "_";
-                        String[] elements2 = System.Text.RegularExpressions.Regex.Split(lastFilePath, pattern2);
-                        blockNumber = elements2.First();
-                        String pattern3 = @"\\";
-                        String[] elements3 = System.Text.RegularExpressions.Regex.Split(blockNumber, pattern3);
-                        blockNumber = elements3.Last();
-                        Int32.TryParse(blockNumber, out int number);
-                        number++;
-                        fileName = direcrory + @"\" + number + "_Block.txt";
-                        CreateBlockFile(fileName, lastFilePath, false);
-                    }
-                }   
+                    string pattern2 = "_";
+                    string[] elements2 = System.Text.RegularExpressions.Regex.Split(blockName, pattern2);
+                    blockNumber = elements2.First();
+                    int.TryParse(blockNumber, out int number);
+                    number++;
+                    fullFilePath = direcrory + @"\" + number + "_Block.txt";
+                    CreateBlockFile(fullFilePath, lastFilePath, false, transactionData);
+                }
                 else
-                    Console.WriteLine("This folder does not exist");                
-            }               
+                {
+                    Console.WriteLine("This folder does not exist");
+                    operationCompleted = false;
+                }
+            }
+            ProofOfWork();
+            return operationCompleted;
         }
 
-        public static void CreateBlockFile(string fileName, string lastFilePath, bool isGenesisBlockBool)
+        public static void CreateBlockFile(string filePath, string lastFilePath, bool isGenesisBlockBool, Dictionary<int, string> transactionData)
         {
             byte[] hashOfPreviousBlock;
             byte[] hash;
             byte[] data;
-            using (FileStream fs = File.Create(fileName))
-            {
-                hash = new UTF8Encoding(true).GetBytes(GetHashCode());
+            using (FileStream fs = File.Create(filePath))
+            { 
+                hash = new UTF8Encoding(true).GetBytes(CreateHashCodeOfBlock());
                 fs.Write(hash, 0, hash.Length);
 
                 hashOfPreviousBlock = isGenesisBlockBool ? new UTF8Encoding(true).GetBytes("0000 ") : new UTF8Encoding(true).GetBytes(GetPreviousHashCode(lastFilePath));
                 fs.Write(hashOfPreviousBlock, 0, hashOfPreviousBlock.Length);
 
-                data = new UTF8Encoding(true).GetBytes("Alice gave Bill 5$");
+                Random random = new Random();
+                int id = random.Next(1, 5);
+                data = new UTF8Encoding(true).GetBytes(GetTransactionData(id, transactionData));
                 fs.Write(data, 0, data.Length);
             }
         }
 
+        public static string GetTransactionData(int id, Dictionary<int, string> transactionData)
+        {
+            return transactionData.Where(x => x.Key == id).First().Value;
+        }
+
         public static string GetPreviousHashCode(string filePath)
         {
-            string hashCode = "";
-
             string text = File.ReadAllText(filePath);
             string pattern = " ";
             string[] elements = System.Text.RegularExpressions.Regex.Split(text, pattern);
-            hashCode = elements.First();
+            string hashCode = elements.First();
 
             return hashCode + " ";
         }
 
-        public static string GetHashCode()
+        public static string CreateHashCodeOfBlock()
         {
             string hashCode = "";
             for (int i = 0; i < 4; i++)
@@ -127,5 +152,25 @@ namespace MyConsoleApp // Note: actual namespace depends on the project name.
             return hashCode + " ";
         }
 
+        public static void ProofOfWork()
+        {
+            DateTime now = DateTime.Now;
+            while (DateTime.Now.Subtract(now).Seconds < 5)
+            {
+                // wait for 5 seconds
+            }
+        }
+
+        public static Dictionary<int, string> CreateDictionary()
+        {
+            IDictionary<int, string> transactionData = new Dictionary<int, string>();
+            transactionData.Add(1, "Alice gave Bill 5$");
+            transactionData.Add(2, "Bill gave Nick 15$");
+            transactionData.Add(3, "Nick gave Tzenh 7$");
+            transactionData.Add(4, "Tzenh gave Alice 29$");
+            transactionData.Add(5, "Jim gave Nick 759$");
+
+            return (Dictionary<int, string>)transactionData;
+        }
     }
 }
